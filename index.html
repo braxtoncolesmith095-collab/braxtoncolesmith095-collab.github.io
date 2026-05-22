@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BigInt Button Simulator</title>
+
+  <style>
+    button {
+  font-size: 1.2em;
+}
+p {
+  font: 1.3em sans-serif;
+}
+  </style>
+
+  
+</head>
+<body>
+  <!DOCTYPE html>
+<p id="stats"></p>
+<button onclick="purchase(2n, 10n**300n, 1)">Debug: *x1e300</button>
+<br>
+<button onclick="purchase(50n, 2n, 1)">$50 = *x2</button>
+<br>
+<button onclick="purchase(pow10BigNum(15), 80n, 1)">$1e15 = *x80</button>
+<br>
+<button onclick="purchase(pow10BigNum(50), 200n, 1)">$1e50 = *x200</button>
+<br>
+<button onclick="purchase(pow10BigNum(300), pow10BigNum(15), 1)">$1e300 = *x1e15</button>
+<br>
+<button onclick="purchase(pow10BigNum(2500), pow10BigNum(100), 1)">$1e2.5K = *x1e100</button>
+<br>
+<button onclick="purchase(pow10BigNum(17500), pow10BigNum(1375), 1)">$1e17.5K = *x1e1.38K</button>
+<br>
+<button onclick="purchase(pow10BigNum(300000), pow10BigNum(61725), 1)">$1e300K = *x1e61.73K</button>
+<br>
+<button onclick="purchase(pow10BigNum(1500000), 1.05n, 1)">$1e1.5M = x^1.05</button>
+
+  <script>
+    // ================= BigNum: fast scientific-style big number =================
+
+class BigNum {
+  constructor(m = 0, e = 0) {
+    this.m = m;
+    this.e = e;
+    this.normalize();
+  }
+
+  static fromBigInt(bi) {
+    if (bi === 0n) return new BigNum(0, 0);
+    const s = bi.toString();
+    const e = s.length - 1;
+    const m = parseFloat(s[0] + "." + s.slice(1, 10));
+    return new BigNum(m, e);
+  }
+
+  static fromNumber(n) {
+    if (n === 0) return new BigNum(0, 0);
+    const e = Math.floor(Math.log10(Math.abs(n)));
+    const m = n / 10 ** e;
+    return new BigNum(m, e);
+  }
+
+  normalize() {
+    if (this.m === 0) {
+      this.e = 0;
+      return;
+    }
+    while (Math.abs(this.m) >= 10) {
+      this.m /= 10;
+      this.e++;
+    }
+    while (Math.abs(this.m) < 1) {
+      this.m *= 10;
+      this.e--;
+    }
+  }
+
+  clone() {
+    return new BigNum(this.m, this.e);
+  }
+
+  add(other) {
+    other = toBigNum(other);
+    if (this.m === 0) return other.clone();
+    if (other.m === 0) return this.clone();
+
+    let a = this, b = other;
+    if (a.e < b.e) [a, b] = [b, a];
+
+    const diff = a.e - b.e;
+    if (diff > 20) return a.clone();
+
+    const m = a.m + b.m / 10 ** diff;
+    return new BigNum(m, a.e);
+  }
+
+  subtract(other) {
+    other = toBigNum(other);
+    return this.add(new BigNum(-other.m, other.e));
+  }
+
+  multiply(other) {
+    other = toBigNum(other);
+    return new BigNum(this.m * other.m, this.e + other.e);
+  }
+
+  powNumber(power) {
+    if (this.m === 0) return new BigNum(0, 0);
+    const newE = this.e * power;
+    const newM = Math.pow(this.m, power);
+    const eInt = Math.floor(newE);
+    const mAdj = newM * Math.pow(10, newE - eInt);
+    return new BigNum(mAdj, eInt);
+  }
+
+  gte(other) {
+    other = toBigNum(other);
+    if (this.e !== other.e) return this.e > other.e;
+    return this.m >= other.m;
+  }
+
+  toSmallNumber() {
+    if (this.e > 15) return Infinity;
+    return this.m * 10 ** this.e;
+  }
+}
+// helper: exact 10^exp as BigNum
+function pow10BigNum(exp) {
+  return new BigNum(1, exp); // 1 × 10^exp
+}
+// ================= Globals =================
+
+let money = new BigNum(0, 0);
+let mult  = new BigNum(1, 0);
+var moneyDisplay = undefined;
+var displayType = 2;
+
+// original suffix list used by formatMoney
+const suffixes = (() => {
+  const out = [
+    "",
+    "K", "M", "B", "T",
+    "Qa", "Qi", "Sx", "Sp", "Oc", "No"
+  ];
+
+  const bases = ["", "U", "D", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No"];
+  const tiers = ["Dc", "Vg", "Tg", "Qg", "Qq", "Sg", "Se", "Og", "Ng"];
+
+  for (const tier of tiers) {
+    for (const base of bases) {
+      out.push(base + tier);
+    }
+  }
+
+  const postCentillion = ["Ce", "Vt", "Tr", "Qa", "Qi", "Se", "Si", "Ot", "Ni"];
+  out.push(...postCentillion);
+
+  return out;
+})();
+
+const toBigNum = v => {
+  if (v instanceof BigNum) return v;
+  if (typeof v === "bigint") return BigNum.fromBigInt(v);
+  if (typeof v === "number") return BigNum.fromNumber(v);
+  return new BigNum(0, 0);
+};
+
+// ================= Base suffix system =================
+
+const BASE_SIMPLE = ['', 'K', 'M', 'B', 'T', 'Qd', 'Qn', 'Sx', 'Sp', 'Oc', 'No'];
+const BASE_BASE  = ['', 'U', 'D', 'T', 'Qd', 'Qn', 'Sx', 'Sp', 'Oc', 'No'];
+const BASE_TIERS = ['De', 'Vg', 'Tg', 'Qg', 'qg', 'Sg', 'sg', 'Og', 'Ng'];
+const BASE_RANKS = ['Ce', 'Du', 'Tr', 'Qa', 'Qi', 'Se', 'Si', 'Ot', 'Ni'];
+
+// total base suffixes per cycle:
+// 11 simple + 90 tier + 9*100 rank = 1001
+const BASE_SIMPLE_COUNT = BASE_SIMPLE.length; // 11
+const BASE_TIER_COUNT   = BASE_BASE.length * BASE_TIERS.length; // 90
+const BASE_RANK_BLOCK   = BASE_BASE.length + BASE_TIER_COUNT;   // 100
+const BASE_TOTAL        = BASE_SIMPLE_COUNT + BASE_TIER_COUNT + BASE_RANK_BLOCK * BASE_RANKS.length; // 1001
+
+function getBaseSuffix(pos) {
+  if (pos < BASE_SIMPLE_COUNT) {
+    return BASE_SIMPLE[pos];
+  }
+
+  const tierStart = BASE_SIMPLE_COUNT; // 11
+  const tierEnd   = tierStart + BASE_TIER_COUNT; // 101
+
+  if (pos < tierEnd) {
+    const offset = pos - tierStart;
+    const b = offset % BASE_BASE.length;
+    const t = Math.floor(offset / BASE_BASE.length);
+    return BASE_BASE[b] + BASE_TIERS[t];
+  }
+
+  const rankStart = tierEnd; // 101
+  const offsetRank = pos - rankStart;
+  const rankIndex = Math.floor(offsetRank / BASE_RANK_BLOCK); // 0..8
+  const insideRank = offsetRank % BASE_RANK_BLOCK;
+
+  const rankName = BASE_RANKS[rankIndex];
+
+  if (insideRank < BASE_BASE.length) {
+    const b = insideRank;
+    return BASE_BASE[b] + rankName;
+  }
+
+  const inner = insideRank - BASE_BASE.length;
+  const b = inner % BASE_BASE.length;
+  const t = Math.floor(inner / BASE_BASE.length);
+  return BASE_BASE[b] + BASE_TIERS[t] + rankName;
+}
+
+// ================= Super-prefix stack (expandable) =================
+
+const SUPER_PREFIXES = ["Mi", "Mc", "Na", "Pa", "Zt", "Au", "Ua"]; // change this list only to extend
+
+function getSuperPrefixStack(level) {
+  // level = 0 → ""
+  // level = 1 → "Mi"
+  // level = 2 → "McMi"
+  // level = 3 → "NaMcMi"
+  if (level <= 0) return "";
+  if (level > SUPER_PREFIXES.length) return null;
+
+  const slice = SUPER_PREFIXES.slice(0, level).reverse();
+  return slice.join("");
+}
+
+// ================= Suffix table (lazy) =================
+
+const MAX_SUFFIX_INDEX = 30000000;
+const SUFFIX_TABLE = [];
+
+function computeSuffix(idx) {
+  const cycleSize = BASE_TOTAL; // 1001
+  const level = Math.floor(idx / cycleSize); // 0 = no super, 1 = Mi, 2 = McMi, 3 = NaMcMi, ...
+  const pos   = idx % cycleSize;
+
+  const superStack = getSuperPrefixStack(level);
+  if (superStack === null) return null; // beyond last super-prefix → scientific
+
+  const baseSuffix = getBaseSuffix(pos);
+  return superStack + baseSuffix;
+}
+
+function getSuffix(idx) {
+  if (idx > MAX_SUFFIX_INDEX) return null;
+  if (idx in SUFFIX_TABLE) return SUFFIX_TABLE[idx];
+  const s = computeSuffix(idx);
+  SUFFIX_TABLE[idx] = s;
+  return s;
+}
+
+// ================= Formatting =================
+
+function formatMoney(m, s) {
+  const bn = toBigNum(m);
+
+  if (bn.e < 3) {
+    return Math.floor(bn.m * 10 ** bn.e).toString();
+  }
+
+  const idx = Math.floor(bn.e / 3);
+  const scaled = bn.m * 10 ** (bn.e - idx * 3);
+  const whole = Math.floor(scaled);
+  const dec = Math.floor((scaled - whole) * 100).toString().padStart(2, "0");
+
+  return whole + "." + dec + (s[idx] || "");
+}
+
+function formatExponentWithSuffix(exp) {
+  if (exp <= 0) return exp.toString();
+  if (exp < 1000) return exp.toString();
+
+  const log10e = Math.log10(exp);
+  const idx = Math.floor(log10e / 3);
+  const groupExp = idx * 3;
+  const mantissa = exp / 10 ** groupExp;
+
+  const suffix = getSuffix(idx);
+  if (suffix === null) {
+    return mantissa.toString() + "e" + groupExp.toString();
+  }
+
+  return mantissa.toString() + suffix;
+}
+
+function formatSuffixes(m) {
+  const bn = toBigNum(m);
+
+  if (bn.e < 3) {
+    return Math.floor(bn.m * 10 ** bn.e).toString();
+  }
+
+  const idx = Math.floor(bn.e / 3);
+  const scaled = bn.m * 10 ** (bn.e - idx * 3);
+  const whole = Math.floor(scaled);
+
+  const suffix = getSuffix(idx);
+  if (suffix === null) {
+    const mantissa = bn.m.toFixed(3);
+    const expStr = formatExponentWithSuffix(bn.e);
+    return mantissa + "e" + expStr;
+  }
+
+  return whole + suffix;
+}
+
+function formatEx(m) {
+  const bn = toBigNum(m);
+
+  if (bn.e < 6) {
+    return Math.floor(bn.m * 10 ** bn.e).toString();
+  }
+
+  const expStr = formatExponentWithSuffix(bn.e);
+  return bn.m.toFixed(3) + "e" + expStr;
+}
+
+// ================= Game loop & purchase =================
+
+setInterval(tick, 33);
+
+function tick() {
+  money = money.add(mult);
+
+  if (displayType == 0) {
+    document.getElementById("stats").innerHTML =
+      "$" + formatMoney(money, suffixes) + "<br>x" + formatMoney(mult, suffixes);
+  } else if (displayType == 1) {
+    document.getElementById("stats").innerHTML =
+      "$" + formatEx(money) + "<br>x" + formatEx(mult);
+  } else if (displayType == 2) {
+    document.getElementById("stats").innerHTML =
+      "$" + formatSuffixes(money) + "<br>x" + formatSuffixes(mult);
+  }
+}
+
+function purchase(price, given, byItself) {
+  const priceBN = price instanceof BigNum
+    ? price
+    : BigNum.fromNumber(price); // assume number/BigNum only, no BigInt
+
+  if (!money.gte(priceBN)) return;
+
+  let givenNum = (given instanceof BigNum) ? given.toSmallNumber() : Number(given);
+
+  if (byItself === 0) {
+    mult = mult.add(givenNum);
+  } else if (byItself === 1) {
+    mult = mult.multiply(mult).multiply(givenNum);
+  } else if (byItself === 2) {
+    mult = mult.powNumber(0.5 * givenNum);
+  }
+
+  money = money.subtract(priceBN);
+}
+
+
+  </script>
+</body>
+</html>
