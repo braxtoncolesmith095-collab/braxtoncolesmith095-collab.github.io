@@ -120,7 +120,7 @@ ui.id="hackmenu-container";
 ui.innerHTML=`
 <p id="hackmenu-title" class="font">Bhack 0.15.0</p>
 <button id="hackmenu-goback">Go back</button>
-<button id="hackmenu-refresh" class="hackmenu-elbutton" style="width:70px;position:absolute;left:200px;top:5px;">Refresh</button>
+<button id="hackmenu-refresh" class="hackmenu-elbutton" style="width:70px;position:absolute;right:75px;top:5px;">Refresh</button>
 
 <div id="hackmenu-elementslist">
   <p class="center">Elements</p>
